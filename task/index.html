@@ -67,6 +67,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid 
       <button data-tab="report">週報</button>
       <button data-tab="cal">予定取込</button>
     </nav>
+    <button data-act="demo">デモ</button>
     <button data-act="export">書き出し</button>
     <button data-act="import">読み込み</button>
     <input type="file" id="imp" accept="application/json" hidden>
@@ -627,6 +628,50 @@ function renderCal(){
     </div>`;
 }
 
+/* ---------- デモデータ（日付は今日を基準にする） ---------- */
+function demoData(){
+  const t = today(), wk = monday(t);
+  const day = (base, n) => addDays(base, n);
+  const at = (n, h, m=0) => { const x = parse(addDays(t, n)); x.setHours(h, m, 0, 0); return x.getTime(); };
+  const mbo1 = { id:'demo-mbo1', half:curHalf(), objective:'新サービスの立ち上げ',
+    krs:['β版を12月中にリリース','利用者インタビューを10件実施','問い合わせ対応を週5時間以内に'],
+    progress:40, review:'設計は順調。インタビューの日程調整に時間がかかっている。' };
+  const mbo2 = { id:'demo-mbo2', half:curHalf(), objective:'業務効率化（定型作業の削減）',
+    krs:['月次集計の作業時間を半減'], progress:20, review:'' };
+  const milestones = [
+    { id:'demo-ms1', mboId:mbo1.id, title:'β版リリース', due:day(t,24), status:'進行中' },
+    { id:'demo-ms2', mboId:mbo1.id, title:'利用者インタビュー10件', due:day(t,10), status:'進行中' },
+    { id:'demo-ms3', mboId:mbo2.id, title:'集計テンプレートの整備', due:day(t,-3), status:'遅延' },
+  ];
+  const todo = (title, role, ms, est, slot, o={}) => ({
+    id:nid(), title, role, milestoneId:ms||null, estMin:est, due:o.due||null,
+    done:!!o.done, doneAt:o.done ? o.doneAt : null, actualMin:o.done ? (o.actual ?? est) : null,
+    slot:slot||'', reason:o.reason||'' });
+  const P = '社内説明会の準備';
+  const todos = [
+    todo(`${P}：議題の整理`, '資料作成', milestones[0].id, 30, day(wk,0)+'|AM', { done:true, doneAt:day(wk,0) }),
+    todo(`${P}：資料の骨子作成`, '資料作成', milestones[0].id, 60, day(wk,1)+'|PM', { done:true, doneAt:day(wk,1), actual:70 }),
+    todo(`${P}：資料本体の作成`, '資料作成', milestones[0].id, 120, day(wk,2)+'|AM', { due:day(wk,4) }),
+    todo('インタビュー候補のリスト作成', '', milestones[1].id, 45, day(wk,0)+'|PM', { done:true, doneAt:day(wk,0) }),
+    todo('インタビュー依頼メールの送信', '', milestones[1].id, 30, day(wk,2)+'|PM', { due:day(wk,3) }),
+    todo('β版の不具合一覧の整理', '', milestones[0].id, 60, day(wk,3)+'|PM', { due:day(wk,4) }),
+    todo('集計テンプレートの作成', '', milestones[2].id, 120, '', { due:day(t,-3), reason:'時間不足' }),
+    todo('問い合わせ対応の振り返り', '', '', 30, day(wk,4)+'|AM', { due:day(wk,4) }),
+    todo('チームへの進捗共有資料', '', milestones[0].id, 90, day(wk,7)+'|AM', { due:day(wk,11) }),
+    todo('レビュー依頼の文面作成', '', '', 15, ''),
+  ];
+  const busy = [];
+  [0,7].forEach(w => busy.push({ s:at(w-(parse(t).getDay()+6)%7 ,14), e:at(w-(parse(t).getDay()+6)%7,15), t:'定例：進捗共有', src:'Google' }));
+  busy.push({ s:at(2,10), e:at(2,11), t:'1on1', src:'Outlook' });
+  busy.push({ s:at(5,13), e:at(5,14), t:'採用面接', src:'Outlook' });
+  busy.sort((a,b) => a.s - b.s);
+  const now = new Date().toLocaleString('ja-JP');
+  return { mbos:[mbo1, mbo2], milestones, todos, busy,
+    reports:{ [wk]:{ reflection:'インタビュー日程の調整が想定より長引いた。来週は依頼を先に出す。' } },
+    calSources:[{ label:'Google', url:'' }, { label:'Outlook', url:'' }],
+    syncAt:{ Google:now, Outlook:now } };
+}
+
 /* ---------- 描画 ---------- */
 function render(){
   document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === UI.tab));
@@ -716,6 +761,11 @@ document.addEventListener('click', e => {
         S.calSources = S.calSources.filter(x => x.label !== l);
         delete S.syncAt[l];
         save(); UI.calMsg = ''; render();
+      }
+      break;
+    case 'demo':
+      if (confirm('現在のデータをデモデータに置き換えます。よろしいですか？')){
+        S = demoData(); UI.week = monday(today()); UI.calMsg = ''; save(); render();
       }
       break;
     case 'export':
