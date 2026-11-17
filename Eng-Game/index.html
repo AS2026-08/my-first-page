@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>英語ぷよぷよ</title>
+<style>
+  :root {
+    --bg: #f4f6fb;
+    --panel: #ffffff;
+    --text: #1d2433;
+    --muted: #667085;
+    --accent: #5b5bd6;
+    --accent-text: #ffffff;
+    --ok: #15803d;
+    --ng: #b91c1c;
+    --border: #dde3ee;
+    --board-bg: #1b2140;
+    --btn: #eef1f8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1424;
+      --panel: #171e33;
+      --text: #e8ecf7;
+      --muted: #9aa4bf;
+      --accent: #8b8bff;
+      --accent-text: #0f1424;
+      --ok: #4ade80;
+      --ng: #f87171;
+      --border: #2a3350;
+      --board-bg: #0b1020;
+      --btn: #222b47;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1424;
+    --panel: #171e33;
+    --text: #e8ecf7;
+    --muted: #9aa4bf;
+    --accent: #8b8bff;
+    --accent-text: #0f1424;
+    --ok: #4ade80;
+    --ng: #f87171;
+    --border: #2a3350;
+    --board-bg: #0b1020;
+    --btn: #222b47;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic", "Noto Sans JP", "Meiryo", sans-serif;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+  }
+  .app { max-width: 980px; margin: 0 auto; padding: 12px 16px 32px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  h1 { font-size: 1.4rem; margin: 0; }
+  .stats { display: flex; gap: 12px; font-size: 0.9rem; color: var(--muted); }
+  .stats b { color: var(--text); font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+
+  .layout { display: grid; gap: 12px; grid-template-columns: 1fr; }
+  @media (min-width: 760px) {
+    .layout { grid-template-columns: auto 300px; justify-content: center; align-items: start; }
+  }
+
+  .board-wrap {
+    position: relative;
+    display: flex; justify-content: center;
+    background: var(--board-bg);
+    border-radius: 14px;
+    padding: 8px;
+  }
+  canvas { display: block; border-radius: 8px; touch-action: manipulation; }
+
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    background: rgba(5, 8, 20, 0.7);
+    color: #fff; border-radius: 14px;
+    text-align: center; padding: 16px;
+  }
+  .overlay p { margin: 0; font-size: 1.1rem; }
+  .overlay .big { font-size: 1.6rem; font-weight: 700; }
+  .hidden { display: none !important; }
+
+  .side { display: grid; gap: 12px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+  }
+  h2 { font-size: 1rem; margin: 0 0 8px; }
+  .muted { color: var(--muted); font-size: 0.9rem; }
+  .prompt-text { margin: 0 0 10px; font-size: 0.92rem; color: var(--muted); }
+  .prompt-text strong { color: var(--text); }
+
+  .answer { display: flex; gap: 8px; }
+  input[type="text"] {
+    flex: 1; min-width: 0;
+    font-size: 16px; /* 16px以上でiOSの自動ズームを防ぐ */
+    padding: 10px 12px; min-height: 44px;
+    border: 2px solid var(--border); border-radius: 10px;
+    background: var(--bg); color: var(--text);
+  }
+  input[type="text"]:focus { outline: none; border-color: var(--accent); }
+  input.shake { animation: shake 0.35s; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+
+  button, select {
+    font: inherit; font-size: 15px;
+    min-height: 44px; padding: 8px 14px;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--btn); color: var(--text);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active { transform: scale(0.97); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 700; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  select { width: 100%; background: var(--bg); }
+
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  .feedback { min-height: 1.5em; margin: 8px 0 0; font-weight: 700; }
+  .feedback.ok { color: var(--ok); }
+  .feedback.ng { color: var(--ng); }
+  .hint-out { font-size: 0.95rem; }
+
+  .pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  .pad button { font-size: 1.1rem; padding: 8px 0; }
+  label { display: block; font-size: 0.9rem; margin-top: 10px; color: var(--muted); }
+  label .val { color: var(--text); font-weight: 700; }
+  input[type="range"] { width: 100%; margin: 8px 0 0; accent-color: var(--accent); }
+
+  .keys { margin: 8px 0 0; font-size: 0.8rem; color: var(--muted); }
+
+  #log { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+  #log li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 0.95rem; }
+  #log li:last-child { border-bottom: none; }
+  #log .en { font-weight: 700; }
+  #log .empty { color: var(--muted); border: none; }
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <h1>英語ぷよぷよ</h1>
+    <div class="stats">
+      <div>スコア <b id="score">0</b></div>
+      <div>ベスト <b id="best">0</b></div>
+      <div>連続 <b id="streak">0</b></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section class="board-wrap" id="boardWrap">
+      <canvas id="board" aria-label="ぷよの盤面"></canvas>
+      <div id="overlay" class="overlay">
+        <p class="big" id="overlayTitle">英語ぷよぷよ</p>
+        <p id="overlayText">日本語の意味の英単語を入力して、ぷよを消そう！</p>
+        <button type="button" class="primary" id="overlayBtn">スタート</button>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="card">
+        <h2>英単語を入力</h2>
+        <p class="prompt-text">ぷよに書かれた<strong>日本語</strong>の英語を入力して Enter。同じ色でつながったぷよがまとめて消えます。</p>
+        <form id="answerForm" class="answer" autocomplete="off">
+          <input type="text" id="answer" placeholder="例: apple" aria-label="英単語を入力"
+                 inputmode="latin" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+          <button type="submit" class="primary">送信</button>
+        </form>
+        <p class="feedback" id="feedback" aria-live="polite"></p>
+        <div class="row">
+          <button type="button" id="hintBtn">ヒント</button>
+          <span class="hint-out muted" id="hintOut"></span>
+        </div>
+        <p class="muted" style="margin:8px 0 0;font-size:0.8rem;">ヒントを使うと連続記録はリセットされます。</p>
+      </section>
+
+      <section class="card">
+        <h2>操作</h2>
+        <div class="pad">
+          <button type="button" id="leftBtn" aria-label="左へ">←</button>
+          <button type="button" id="downBtn" aria-label="下へ">↓</button>
+          <button type="button" id="rightBtn" aria-label="右へ">→</button>
+          <button type="button" id="rotBtn" aria-label="回転">⟳</button>
+        </div>
+        <label for="speed">落下速度 <span class="val" id="speedVal">5</span></label>
+        <input type="range" id="speed" min="1" max="10" value="5">
+        <label for="level">むずかしさ</label>
+        <select id="level">
+          <option value="1">初級（基本の単語）</option>
+          <option value="2">中級（少し長い単語）</option>
+          <option value="3">上級（難しい単語）</option>
+          <option value="0">まぜる</option>
+        </select>
+        <div class="row">
+          <button type="button" class="primary" id="startBtn">はじめから</button>
+          <button type="button" id="pauseBtn">一時停止</button>
+        </div>
+        <p class="keys">キーボード: ← → ↓ で移動、Z / ↑ で回転。</p>
+      </section>
+
+      <section class="card">
+        <h2>消えた単語</h2>
+        <ul id="log"><li class="empty">まだありません</li></ul>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---- 設定 ----
+  const COLS = 6, ROWS = 12;
+  const COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#facc15"];
+  const TEXT_COLORS = ["#ffffff", "#ffffff", "#ffffff", "#1d2433"];
+  const BEST_KEY = "eng-puyo-best";
+  const LOG_MAX = 12;
+
+  // 単語: [英語, 日本語（ぷよに表示する短い訳）, 難易度 1〜3]
+  const WORDS = [
+    ["apple", "りんご", 1], ["dog", "犬", 1], ["cat", "猫", 1], ["sun", "太陽", 1],
+    ["water", "水", 1], ["book", "本", 1], ["pen", "ペン", 1], ["car", "車", 1],
+    ["tree", "木", 1], ["fish", "魚", 1], ["house", "家", 1], ["bird", "鳥", 1],
+    ["milk", "牛乳", 1], ["rice", "ご飯", 1], ["red", "赤", 1], ["blue", "青", 1],
+    ["green", "緑", 1], ["white", "白", 1], ["black", "黒", 1], ["three", "三", 1],
+    ["school", "学校", 1], ["friend", "友達", 1], ["day", "日", 1], ["night", "夜", 1],
+    ["big", "大きい", 1], ["small", "小さい", 1], ["hot", "暑い", 1], ["cold", "寒い", 1],
+    ["eat", "食べる", 1], ["run", "走る", 1], ["read", "読む", 1], ["write", "書く", 1],
+    ["sleep", "眠る", 1], ["morning", "朝", 1], ["rain", "雨", 1], ["snow", "雪", 1],
+    ["teacher", "先生", 2], ["station", "駅", 2], ["library", "図書館", 2], ["window", "窓", 2],
+    ["flower", "花", 2], ["bread", "パン", 2], ["museum", "博物館", 2], ["hospital", "病院", 2],
+    ["kitchen", "台所", 2], ["market", "市場", 2], ["language", "言語", 2], ["dream", "夢", 2],
+    ["believe", "信じる", 2], ["change", "変える", 2], ["decide", "決める", 2], ["explain", "説明", 2],
+    ["important", "重要", 2], ["island", "島", 2], ["letter", "手紙", 2], ["mountain", "山", 2],
+    ["ocean", "海", 2], ["price", "値段", 2], ["travel", "旅行", 2], ["wonder", "不思議", 2],
+    ["achieve", "達成", 3], ["approach", "近づく", 3], ["curious", "好奇心", 3], ["destination", "目的地", 3],
+    ["environment", "環境", 3], ["essential", "不可欠", 3], ["generous", "寛大", 3], ["ignore", "無視", 3],
+    ["journey", "旅", 3], ["knowledge", "知識", 3], ["opportunity", "機会", 3], ["patience", "忍耐", 3],
+    ["recognize", "認識", 3], ["similar", "似た", 3], ["urgent", "緊急", 3], ["promise", "約束", 3],
+    ["whisper", "ささやく", 3]
+  ];
+
+  // ---- 状態 ----
+  let grid = [];        // grid[y][x] = { en, ja, c } | null
+  let cur = null;       // 落下中のペア { x, y, rot, a, b }
+  let score = 0, streak = 0, best = 0;
+  let playing = false, paused = false, gameOver = false;
+  let acc = 0, lastT = null;
+  let logItems = [];
+  let cell = 40, dpr = 1;
+
+  // rot: 0=上, 1=右, 2=下, 3=左 （pivot から見た b の位置）
+  const OFF = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+
+  // ---- DOM ----
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("board"), ctx = canvas.getContext("2d");
+  const boardWrap = $("boardWrap");
+  const overlay = $("overlay"), overlayTitle = $("overlayTitle"), overlayText = $("overlayText"), overlayBtn = $("overlayBtn");
+  const answerInput = $("answer"), answerForm = $("answerForm");
+  const feedback = $("feedback"), hintOut = $("hintOut");
+  const scoreEl = $("score"), bestEl = $("best"), streakEl = $("streak");
+  const speedEl = $("speed"), speedVal = $("speedVal"), levelEl = $("level");
+  const pauseBtn = $("pauseBtn"), startBtn = $("startBtn"), logEl = $("log");
+
+  // ---- 保存（失敗しても動くように try/catch）----
+  function loadBest() {
+    try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch (e) { return 0; }
+  }
+  function saveBest(v) {
+    try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) { /* 保存できなくても続行 */ }
+  }
+
+  // ---- ユーティリティ ----
+  const rand = (n) => Math.floor(Math.random() * n);
+  function pool() {
+    const lv = Number(levelEl.value);
+    return WORDS.filter((w) => lv === 0 || w[2] === lv);
+  }
+  function randomBlob() {
+    const list = pool();
+    const w = list[rand(list.length)];
+    return { en: w[0], ja: w[1], c: rand(COLORS.length) };
+  }
+  function intervalMs() {
+    const v = Number(speedEl.value);
+    return 1100 - (v - 1) * 100; // 1100ms(遅い) 〜 200ms(速い)
+  }
+  function inside(x, y) { return x >= 0 && x < COLS && y >= 0 && y < ROWS; }
+  function empty(x, y) { return inside(x, y) && grid[y][x] === null; }
+  function fits(x, y, rot) {
+    const [dx, dy] = OFF[rot];
+    return empty(x, y) && empty(x + dx, y + dy);
+  }
+
+  // ---- ゲームの動き ----
+  function resetGame() {
+    grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    cur = null;
+    score = 0; streak = 0;
+    logItems = [];
+    acc = 0; lastT = null;
+    playing = true; paused = false; gameOver = false;
+    spawn();
+    feedback.textContent = "";
+    feedback.className = "feedback";
+    hintOut.textContent = "";
+    renderLog();
+    updateUI();
+    overlay.classList.add("hidden");
+  }
+
+  function spawn() {
+    const pair = { x: 2, y: 1, rot: 0, a: randomBlob(), b: randomBlob() };
+    if (!fits(pair.x, pair.y, pair.rot)) {
+      cur = null;
+      endGame();
+      return;
+    }
+    cur = pair;
+  }
+
+  function endGame() {
+    gameOver = true;
+    playing = false;
+    if (score > best) { best = score; saveBest(best); }
+    showOverlay("ゲームオーバー", `スコア ${score} 点`, "もう一度");
+    updateUI();
+  }
+
+  function move(dx) {
+    if (!canPlay() || !cur) return;
+    if (fits(cur.x + dx, cur.y, cur.rot)) cur.x += dx;
+    draw();
+  }
+
+  function rotate() {
+    if (!canPlay() || !cur) return;
+    const nr = (cur.rot + 1) % 4;
+    // 回転できない時は左右・上にずらして試す
+    const kicks = [[0, 0], [-1, 0], [1, 0], [0, -1]];
+    for (const [kx, ky] of kicks) {
+      if (fits(cur.x + kx, cur.y + ky, nr)) {
+        cur.x += kx; cur.y += ky; cur.rot = nr;
+        break;
+      }
+    }
+    draw();
+  }
+
+  // 1マス下へ。動けなければ固定
+  function stepDown() {
+    if (!canPlay() || !cur) return;
+    if (fits(cur.x, cur.y + 1, cur.rot)) {
+      cur.y += 1;
+    } else {
+      lockPair();
+    }
+  }
+
+  function softDrop() {
+    if (!canPlay()) return;
+    stepDown();
+    draw();
+  }
+
+  function lockPair() {
+    const [dx, dy] = OFF[cur.rot];
+    grid[cur.y][cur.x] = cur.a;
+    grid[cur.y + dy][cur.x + dx] = cur.b;
+    cur = null;
+    gravity();
+    spawn();
+    updateUI();
+  }
+
+  // 空きマスがあるとき、ぷよを下へ詰める
+  function gravity() {
+    for (let x = 0; x < COLS; x++) {
+      let write = ROWS - 1;
+      for (let y = ROWS - 1; y >= 0; y--) {
+        if (grid[y][x]) {
+          if (y !== write) {
+            grid[write][x] = grid[y][x];
+            grid[y][x] = null;
+          }
+          write--;
+        }
+      }
+    }
+  }
+
+  // 同じ色で上下左右につながっているぷよを集める
+  function sameColorGroup(sx, sy) {
+    const color = grid[sy][sx].c;
+    const seen = new Set();
+    const stack = [[sx, sy]];
+    const out = [];
+    while (stack.length) {
+      const [x, y] = stack.pop();
+      const key = x + "," + y;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!inside(x, y) || !grid[y][x] || grid[y][x].c !== color) continue;
+      out.push([x, y]);
+      stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+    }
+    return out;
+  }
+
+  // 入力された英単語に一致するぷよを消す
+  function submitAnswer(raw) {
+    if (!canPlay()) {
+      setFeedback(paused ? "一時停止中です" : "スタートを押してね", "ng");
+      return;
+    }
+    const typed = raw.trim().toLowerCase();
+    if (!typed) return;
+
+    const targets = [];
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const b = grid[y][x];
+        if (b && b.en === typed) targets.push([x, y]);
+      }
+    }
+
+    if (targets.length === 0) {
+      streak = 0;
+      setFeedback("ちがうよ。もう一度！", "ng");
+      answerInput.classList.remove("shake");
+      void answerInput.offsetWidth; // アニメーションを再開
+      answerInput.classList.add("shake");
+      updateUI();
+      return;
+    }
+
+    // 一致したぷよとそのつながりを消す
+    const toRemove = new Map();
+    for (const [x, y] of targets) {
+      for (const [gx, gy] of sameColorGroup(x, y)) {
+        toRemove.set(gx + "," + gy, [gx, gy]);
+      }
+    }
+
+    const popped = [];
+    for (const [x, y] of toRemove.values()) {
+      popped.push(grid[y][x]);
+      grid[y][x] = null;
+    }
+    gravity();
+
+    streak += 1;
+    const bonus = 1 + Math.min(streak, 10) * 0.1;
+    const gained = Math.floor(popped.length * 10 * bonus);
+    score += gained;
+
+    const uniq = new Map();
+    for (const b of popped) uniq.set(b.en, b);
+    for (const b of uniq.values()) addLog(b);
+
+    setFeedback(`✓ ${popped.length}こ消えた！ +${gained}点`, "ok");
+    hintOut.textContent = "";
+    if (score > best) { best = score; saveBest(best); }
+    updateUI();
+    draw();
+  }
+
+  function useHint() {
+    if (!canPlay()) {
+      setFeedback(paused ? "一時停止中です" : "スタートを押してね", "ng");
+      return;
+    }
+    const cells = [];
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (grid[y][x]) cells.push(grid[y][x]);
+    if (cells.length === 0) {
+      hintOut.textContent = "盤面にぷよがまだありません";
+      return;
+    }
+    const b = cells[rand(cells.length)];
+    const blanks = Array(b.en.length - 1).fill("_").join(" ");
+    hintOut.textContent = `「${b.ja}」→ ${b.en[0]} ${blanks}（${b.en.length}文字）`;
+    streak = 0;
+    updateUI();
+  }
+
+  function setFeedback(text, kind) {
+    feedback.textContent = text;
+    feedback.className = "feedback " + (kind || "");
+  }
+
+  function addLog(b) {
+    logItems.unshift(b);
+    if (logItems.length > LOG_MAX) logItems.length = LOG_MAX;
+    renderLog();
+  }
+
+  function renderLog() {
+    logEl.innerHTML = "";
+    if (logItems.length === 0) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = "まだありません";
+      logEl.appendChild(li);
+      return;
+    }
+    for (const b of logItems) {
+      const li = document.createElement("li");
+      const en = document.createElement("span");
+      en.className = "en";
+      en.textContent = b.en;
+      const ja = document.createElement("span");
+      ja.className = "muted";
+      ja.textContent = b.ja;
+      li.append(en, ja);
+      logEl.appendChild(li);
+    }
+  }
+
+  // ---- 画面表示 ----
+  function canPlay() { return playing && !paused && !gameOver; }
+
+  function updateUI() {
+    scoreEl.textContent = score;
+    bestEl.textContent = best;
+    streakEl.textContent = streak;
+    pauseBtn.textContent = paused ? "再開" : "一時停止";
+    pauseBtn.disabled = !playing;
+    startBtn.textContent = playing || gameOver ? "はじめから" : "スタート";
+  }
+
+  function showOverlay(title, text, btn) {
+    overlayTitle.textContent = title;
+    overlayText.textContent = text;
+    overlayBtn.textContent = btn;
+    overlay.classList.remove("hidden");
+  }
+
+  function resize() {
+    const availW = Math.max(200, boardWrap.clientWidth - 16);
+    const availH = Math.max(320, Math.min(window.innerHeight * 0.66, 760));
+    cell = Math.floor(Math.min(availW / COLS, availH / ROWS));
+    dpr = window.devicePixelRatio || 1;
+    const w = cell * COLS, h = cell * ROWS;
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+
+  function drawBlob(gx, gy, b) {
+    const cx = (gx + 0.5) * cell, cy = (gy + 0.5) * cell;
+    const r = cell * 0.44;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = COLORS[b.c];
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.3, cy - r * 0.35, r * 0.28, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fill();
+
+    const len = b.ja.length;
+    const fs = cell * (len <= 2 ? 0.34 : len === 3 ? 0.28 : 0.23);
+    ctx.font = `700 ${fs}px "Hiragino Sans", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif`;
+    ctx.fillStyle = TEXT_COLORS[b.c];
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(b.ja, cx, cy + 1, r * 1.75);
+  }
+
+  function draw() {
+    const W = cell * COLS, H = cell * ROWS;
+    ctx.clearRect(0, 0, W, H);
+
+    // うすいマス目
+    ctx.strokeStyle = "rgba(255,255,255,0.05)";
+    ctx.lineWidth = 1;
+    for (let x = 1; x < COLS; x++) {
+      ctx.beginPath(); ctx.moveTo(x * cell, 0); ctx.lineTo(x * cell, H); ctx.stroke();
+    }
+    for (let y = 1; y < ROWS; y++) {
+      ctx.beginPath(); ctx.moveTo(0, y * cell); ctx.lineTo(W, y * cell); ctx.stroke();
+    }
+
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (grid[y][x]) drawBlob(x, y, grid[y][x]);
+      }
+    }
+    if (cur) {
+      const [dx, dy] = OFF[cur.rot];
+      drawBlob(cur.x, cur.y, cur.a);
+      drawBlob(cur.x + dx, cur.y + dy, cur.b);
+    }
+  }
+
+  // ---- ループ ----
+  function frame(t) {
+    if (lastT === null) lastT = t;
+    const dt = t - lastT;
+    lastT = t;
+    if (canPlay() && cur) {
+      acc += dt;
+      const iv = intervalMs();
+      if (acc > iv * 3) acc = iv * 3; // タブ切替直後の一気落下を防ぐ
+      while (acc >= iv && canPlay() && cur) {
+        acc -= iv;
+        stepDown();
+      }
+      draw();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---- イベント ----
+  function startGame() { resetGame(); }
+
+  startBtn.addEventListener("click", startGame);
+
+  pauseBtn.addEventListener("click", () => {
+    if (!playing || gameOver) return;
+    paused = !paused;
+    if (paused) {
+      showOverlay("一時停止中", "再開すると続きからはじまります", "再開");
+    } else {
+      overlay.classList.add("hidden");
+      acc = 0; lastT = null;
+    }
+    updateUI();
+  });
+
+  // オーバーレイのボタン: 一時停止中なら再開、それ以外（開始・もう一度）ならゲーム開始
+  overlayBtn.addEventListener("click", () => {
+    if (paused) {
+      paused = false;
+      overlay.classList.add("hidden");
+      acc = 0; lastT = null;
+      updateUI();
+    } else {
+      startGame();
+    }
+  });
+
+  answerForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    submitAnswer(answerInput.value);
+    answerInput.value = "";
+    answerInput.focus();
+  });
+
+  $("hintBtn").addEventListener("click", useHint);
+  $("leftBtn").addEventListener("click", () => move(-1));
+  $("rightBtn").addEventListener("click", () => move(1));
+  $("downBtn").addEventListener("click", softDrop);
+  $("rotBtn").addEventListener("click", rotate);
+
+  speedEl.addEventListener("input", () => { speedVal.textContent = speedEl.value; });
+  levelEl.addEventListener("change", () => {
+    if (!playing) setFeedback("むずかしさを変えました。はじめからで反映されます", "");
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest && e.target.closest("input, select, textarea")) return;
+    if (!canPlay()) return;
+    switch (e.key) {
+      case "ArrowLeft": move(-1); e.preventDefault(); break;
+      case "ArrowRight": move(1); e.preventDefault(); break;
+      case "ArrowDown": softDrop(); e.preventDefault(); break;
+      case "ArrowUp": case "z": case "Z": rotate(); e.preventDefault(); break;
+    }
+  });
+
+  window.addEventListener("resize", resize);
+
+  // ---- 初期化 ----
+  best = loadBest();
+  grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  speedVal.textContent = speedEl.value;
+  renderLog();
+  updateUI();
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
