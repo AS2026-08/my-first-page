@@ -20,7 +20,7 @@ button.ghost{border-color:transparent;color:var(--sub);background:none;padding:4
 button.danger{color:var(--warn)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
 input,select,textarea{font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:inherit;max-width:100%}
-textarea{width:100%;min-height:70px}
+textarea{width:100%;min-height:80px}
 .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .grow{flex:1;min-width:140px}
 .num{width:90px}
@@ -29,12 +29,14 @@ textarea{width:100%;min-height:70px}
 .item{border-top:1px solid var(--line);padding:10px 0}
 .item:first-of-type{border-top:0}
 .item.done .ttl{text-decoration:line-through;color:var(--sub)}
+.item.off{opacity:.5}
 .meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:.9rem}
 .meta select,.meta input{font-size:.9rem;padding:4px 6px}
 .chip{background:var(--accent-soft);border-radius:10px;padding:6px 8px;margin-bottom:6px}
 .chip.done{opacity:.55}
 .chip label{display:flex;gap:6px;align-items:flex-start}
 .chip select{margin-top:4px;width:100%}
+.busy{font-size:.78rem;color:#555;background:#eceff3;border-radius:6px;padding:3px 6px;margin-bottom:4px}
 .wrap{overflow-x:auto}
 table.grid{border-collapse:collapse;width:100%;min-width:680px;background:#fff}
 table.grid th,table.grid td{border:1px solid var(--line);vertical-align:top;padding:6px;width:18%}
@@ -44,38 +46,70 @@ table.grid td.over{background:#fbe9e9}
 .sum{font-size:.8rem;color:var(--sub);text-align:right;margin-top:4px}
 pre{white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:.88rem;margin:0}
 .half{margin:18px 0 6px;color:var(--ink);font-size:1.05rem}
+.log{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.msg{padding:8px 12px;border-radius:12px;max-width:85%;white-space:pre-wrap}
+.msg.bot{background:#f0f2f5}
+.msg.me{background:var(--accent-soft);align-self:flex-end}
 @media (max-width:600px){main{padding:12px}}
 </style>
 </head>
 <body>
 <main>
   <h1>業務タスク・週報</h1>
-  <p class="lead">MBO・マイルストーン・Todo を管理し、週報にまとめます（自分用）</p>
+  <p class="lead">MBO・マイルストーン・Todo を管理し、予定の空き時間に割り振って、週報にまとめます（自分用）</p>
 
   <div class="bar" style="margin-bottom:14px">
     <nav class="tabs grow">
       <button data-tab="week">今週</button>
+      <button data-tab="chat">対話で作成</button>
       <button data-tab="todo">Todo</button>
       <button data-tab="mbo">MBO</button>
       <button data-tab="report">週報</button>
+      <button data-tab="cal">予定取込</button>
     </nav>
     <button data-act="export">書き出し</button>
     <button data-act="import">読み込み</button>
     <input type="file" id="imp" accept="application/json" hidden>
   </div>
 
-  <section data-view="week" id="v-week"></section>
-  <section data-view="todo" id="v-todo" hidden></section>
-  <section data-view="mbo" id="v-mbo" hidden></section>
+  <section data-view="week"   id="v-week"></section>
+  <section data-view="chat"   id="v-chat"   hidden></section>
+  <section data-view="todo"   id="v-todo"   hidden></section>
+  <section data-view="mbo"    id="v-mbo"    hidden></section>
   <section data-view="report" id="v-report" hidden></section>
+  <section data-view="cal"    id="v-cal"    hidden></section>
 </main>
 
 <script>
 const KEY = 'taskWeeklyV1';
 const CAP = 180;                       // 午前・午後それぞれの作業目安（分）
+const WORK = { AM:[9,12], PM:[13,18] };// 予定と照らし合わせる時間帯
+const WINDOW_DAYS = 30;                // 予定を読み込む期間（今日から）
 const ESTS = [15,30,45,60,75,90,105,120,150,180,240,300,360,480];
 const MS_STATUS = ['未着手','進行中','達成','遅延'];
 const REASONS = ['時間不足','見積ミス','優先度変更','割り込み','依存待ち','その他'];
+const DAY_IDX = { SU:0, MO:1, TU:2, WE:3, TH:4, FR:5, SA:6 };
+
+/* ---------- 対話型タスク作成のテンプレート（分あたりの見積は分単位） ---------- */
+const TEMPLATES = {
+  meeting: { name:'会議準備', keys:['会議','MTG','ミーティング','打ち合わせ','打合せ'],
+    roles: {
+      '進行役':  [['議題・ゴールの整理',30],['アジェンダ作成',30],['参加者への案内',15],['当日の進行メモ',30]],
+      '資料作成':[['議題の整理',30],['資料の骨子作成',60],['資料本体の作成',120],['図表・数値の確認',45]],
+      '参加者':  [['事前資料の確認',30],['質問・意見の準備',30]],
+      '確認者':  [['資料のレビュー',45],['フィードバック返却',15]]
+    } },
+  document: { name:'資料作成', keys:['資料','スライド','提案書','企画書'],
+    roles: {
+      '作成者':[['構成の整理',30],['骨子の作成',60],['本体の作成',120],['図表の作成',60],['見直し',30]],
+      '確認者':[['内容レビュー',45],['フィードバック返却',15]]
+    } },
+  report: { name:'報告・レポート', keys:['報告','レポート','報告書','まとめ'],
+    roles: {
+      '作成者':[['目的・論点の整理',30],['データ収集',60],['文章の作成',60],['見直し',30]],
+      '確認者':[['内容の確認',30]]
+    } }
+};
 
 /* ---------- 日付・文字列ユーティリティ ---------- */
 const pad = n => String(n).padStart(2,'0');
@@ -86,7 +120,8 @@ const monday = s => { const d = parse(s); d.setDate(d.getDate() - ((d.getDay()+6
 const today = () => ymd(new Date());
 const DOW = ['日','月','火','水','木','金','土'];
 const dlabel = s => { const d = parse(s); return `${d.getMonth()+1}/${d.getDate()}(${DOW[d.getDay()]})`; };
-const fmtMin = m => { m = Number(m)||0; const h = Math.floor(m/60), r = m%60; return h&&r ? `${h}時間${r}分` : h ? `${h}時間` : `${r}分`; };
+const hm = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const fmtMin = m => { m = Math.round(Number(m)||0); const h = Math.floor(m/60), r = m%60; return h&&r ? `${h}時間${r}分` : h ? `${h}時間` : `${r}分`; };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const curHalf = () => { const d = new Date(), y = d.getFullYear(), m = d.getMonth()+1;
@@ -96,10 +131,44 @@ const slotsOf = ws => { const a = []; for (let i=0;i<5;i++){ const d = addDays(w
 const slotLabel = k => { const [d,p] = k.split('|'); return `${dlabel(d)} ${p==='AM'?'午前':'午後'}`; };
 const dayOf = t => t.slot ? t.slot.split('|')[0] : '';
 
+/* ---------- 空き時間の計算 ---------- */
+function slotWindow(k){
+  const [d,p] = k.split('|'); const x = parse(d); const [h1,h2] = WORK[p];
+  return [new Date(x.getFullYear(),x.getMonth(),x.getDate(),h1).getTime(),
+          new Date(x.getFullYear(),x.getMonth(),x.getDate(),h2).getTime()];
+}
+function busyIn(k){ const [a,b] = slotWindow(k); return S.busy.filter(x => x.e > a && x.s < b); }
+function busyMin(k){
+  const [a,b] = slotWindow(k);
+  return busyIn(k).reduce((acc,x) => acc + (Math.min(b,x.e) - Math.max(a,x.s)) / 60000, 0);
+}
+const freeMin = k => Math.max(0, CAP - busyMin(k));
+
+/* 項目を前から順に、空きのある午前・午後へ割り振る（期限を超えない・平日のみ） */
+function planSlots(items, deadline){
+  const days = [];
+  for (let i=0;i<60;i++){ const d = addDays(today(), i); const w = parse(d).getDay(); if (w>=1 && w<=5) days.push(d); }
+  const used = {};
+  S.todos.filter(t => !t.done && t.slot).forEach(t => used[t.slot] = (used[t.slot]||0) + (+t.estMin||0));
+  return items.map(it => {
+    if (!it.on) return null;
+    for (const d of days){
+      if (deadline && d > deadline) break;
+      for (const p of ['AM','PM']){
+        const k = d+'|'+p;
+        if (slotWindow(k)[1] <= Date.now()) continue;   // 終わった枠は使わない
+        if (freeMin(k) - (used[k]||0) >= it.m){ used[k] = (used[k]||0) + it.m; return k; }
+      }
+    }
+    return null;
+  });
+}
+
 /* ---------- 状態の読み書き（ブラウザ保存） ---------- */
-const blank = () => ({ mbos:[], milestones:[], todos:[], reports:{} });
+const blank = () => ({ mbos:[], milestones:[], todos:[], reports:{}, busy:[], calSources:[], syncAt:{} });
 let S = blank();
-const UI = { tab:'week', week: monday(today()), filter:'open' };
+const UI = { tab:'week', week: monday(today()), filter:'open', chat:null, log:[], calMsg:'' };
+const newChat = () => ({ step:'topic', topic:'', tpl:null, role:'', deadline:'', pre:false, ms:'', items:[] });
 function load(){ try { const raw = localStorage.getItem(KEY); S = raw ? { ...blank(), ...JSON.parse(raw) } : blank(); } catch(e){ S = blank(); } }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){ alert('保存できませんでした。ブラウザの容量や設定を確認してください。'); } }
 
@@ -138,10 +207,11 @@ function renderWeek(){
   const days = [0,1,2,3,4].map(i => addDays(ws,i));
   const head = `<tr><th></th>${days.map(d => `<th>${dlabel(d)}</th>`).join('')}</tr>`;
   const body = ['AM','PM'].map(p => `<tr><th>${p==='AM'?'午前':'午後'}</th>${days.map(d => {
-      const k = d+'|'+p, ts = S.todos.filter(t => t.slot === k);
+      const k = d+'|'+p, ts = S.todos.filter(t => t.slot === k), free = freeMin(k);
       const sum = ts.filter(t => !t.done).reduce((a,t) => a + (+t.estMin||0), 0);
-      return `<td class="${sum>CAP?'over':''}">${ts.map(t => todoChip(t, slots)).join('')}
-        <div class="sum">${fmtMin(sum)} / ${fmtMin(CAP)}</div></td>`;
+      const busy = busyIn(k).map(x => `<div class="busy">📅 ${hm(x.s)}–${hm(x.e)} ${esc(x.t)}</div>`).join('');
+      return `<td class="${sum>free?'over':''}">${busy}${ts.map(t => todoChip(t, slots)).join('')}
+        <div class="sum">作業 ${fmtMin(sum)} / 空き ${fmtMin(free)}</div></td>`;
     }).join('')}</tr>`).join('');
 
   document.getElementById('v-week').innerHTML = `
@@ -157,7 +227,119 @@ function renderWeek(){
       ${pool.length ? pool.map(t => todoChip(t, slots)).join('') : '<p class="muted">ありません</p>'}
     </div>
     <div class="card wrap"><table class="grid"><thead>${head}</thead><tbody>${body}</tbody></table></div>
-    <p class="muted">午前・午後それぞれ ${fmtMin(CAP)} を目安にしています。超えると赤くなります。</p>`;
+    <p class="muted">空きは「作業目安 ${fmtMin(CAP)}」から予定の時間を差し引いた値です。作業が空きを超えると赤くなります。</p>`;
+}
+
+/* ---------- 対話でタスクを作る ---------- */
+function ask(c, step, text){ c.step = step; UI.log.push({ who:'bot', text }); }
+function buildItems(c){
+  const tpl = TEMPLATES[c.tpl];
+  let list = ((tpl.roles[c.role]) || []).map(([t,m]) => ({ t, m, role:c.role, on:true }));
+  if (c.pre) list.splice(Math.min(1, list.length), 0, { t:'関係者への事前確認', m:30, role:c.role, on:true });
+  return list;
+}
+function handleChat(kind, fd){
+  const c = UI.chat;
+  if (kind === 'chat-topic'){
+    const text = (fd.get('topic')||'').trim(); if (!text) return;
+    c.topic = text; UI.log.push({ who:'me', text });
+    const key = Object.keys(TEMPLATES).find(k => TEMPLATES[k].keys.some(w => text.includes(w)));
+    if (key){ c.tpl = key; ask(c,'role', `「${TEMPLATES[key].name}」の型で作ります。あなたの役割を選んでください`); }
+    else { c.tpl = null; ask(c,'manual', 'テンプレートに当てはまりませんでした。やることを1行ずつ入力してください'); }
+  }
+  else if (kind === 'chat-deadline'){ setChat('deadline', fd.get('d') || ''); }
+  else if (kind === 'chat-manual'){
+    const lines = (fd.get('lines')||'').split('\n').map(s => s.trim()).filter(Boolean);
+    if (!lines.length) return;
+    c.items = lines.map(t => ({ t, m:60, role:'', on:true }));
+    UI.log.push({ who:'me', text: `${lines.length}件の作業を入力` });
+    ask(c,'deadline','期限はいつですか？');
+  }
+}
+function setChat(k, v){
+  const c = UI.chat;
+  if (k === 'role'){
+    c.role = v; UI.log.push({ who:'me', text:v });
+    ask(c,'deadline','期限はいつですか？');
+  } else if (k === 'roleOther'){
+    UI.log.push({ who:'me', text:'その他' });
+    c.tpl = null; ask(c,'manual','やることを1行ずつ入力してください');
+  } else if (k === 'deadline'){
+    c.deadline = v;
+    UI.log.push({ who:'me', text: v || '期限なし' });
+    if (c.tpl) ask(c,'pre','関係者への事前確認はありますか？');
+    else ask(c,'ms','マイルストーンに紐づけますか？');
+  } else if (k === 'pre'){
+    c.pre = v === 'yes'; UI.log.push({ who:'me', text: c.pre ? 'はい' : 'いいえ' });
+    ask(c,'ms','マイルストーンに紐づけますか？');
+  } else if (k === 'ms'){
+    c.ms = v;
+    const name = v ? msName(v) : 'なし';
+    UI.log.push({ who:'me', text: name });
+    if (c.tpl) c.items = buildItems(c);
+    ask(c,'preview','タスクを作りました。修正してから登録してください');
+  }
+}
+function renderChat(){
+  const c = UI.chat;
+  const log = UI.log.map(m => `<div class="msg ${m.who}">${esc(m.text)}</div>`).join('');
+  let ui = '';
+  if (c.step === 'topic') ui = `<form data-form="chat-topic" class="bar">
+      <input type="text" name="topic" class="grow" placeholder="例：○○会議の準備" required><button class="primary">送信</button></form>`;
+  else if (c.step === 'role') ui = `<div class="bar">${Object.keys(TEMPLATES[c.tpl].roles).map(r =>
+      `<button data-act="chatSet" data-k="role" data-v="${esc(r)}">${esc(r)}</button>`).join('')}
+      <button data-act="chatSet" data-k="roleOther" data-v="">その他（自分で入力）</button></div>`;
+  else if (c.step === 'manual') ui = `<form data-form="chat-manual">
+      <textarea name="lines" placeholder="やることを1行に1つ入力（例：資料の下書き）" required></textarea>
+      <div class="bar" style="margin-top:8px"><button class="primary">次へ</button></div></form>`;
+  else if (c.step === 'deadline') ui = `<form data-form="chat-deadline" class="bar">
+      <input type="date" name="d"><button class="primary">設定</button>
+      <button data-act="chatSet" data-k="deadline" data-v="">期限なし</button></form>`;
+  else if (c.step === 'pre') ui = `<div class="bar">
+      <button data-act="chatSet" data-k="pre" data-v="yes" class="primary">はい</button>
+      <button data-act="chatSet" data-k="pre" data-v="no">いいえ</button></div>`;
+  else if (c.step === 'ms') ui = `<div class="bar">${S.milestones.map(m =>
+      `<button data-act="chatSet" data-k="ms" data-v="${m.id}">${esc(m.title)}</button>`).join('')}
+      <button data-act="chatSet" data-k="ms" data-v="">なし</button></div>`;
+  else if (c.step === 'preview') ui = renderPreview(c);
+
+  document.getElementById('v-chat').innerHTML = `<div class="card">
+    <div class="hd"><h2>対話でタスクを作る</h2><button data-act="chatReset" class="ghost">最初から</button></div>
+    <div class="log">${log}</div>${ui}</div>`;
+}
+function renderPreview(c){
+  const plan = planSlots(c.items, c.deadline);
+  const rows = c.items.map((it,i) => `<div class="item${it.on?'':' off'}">
+      <div class="bar">
+        <input type="checkbox" data-act="citem" data-i="${i}"${it.on?' checked':''}>
+        <input type="text" class="grow" value="${esc(it.t)}" data-citem-title="${i}">
+        <select data-chg="citem-est" data-i="${i}">${estOptions(it.m)}</select>
+      </div>
+      <div class="muted" style="margin-left:26px">→ ${it.on
+        ? (plan[i] ? slotLabel(plan[i]) : '割り振れる空きがありません（期限か空き時間を確認）')
+        : '登録しません'}</div>
+    </div>`).join('');
+  const total = c.items.filter(x => x.on).reduce((a,x) => a + x.m, 0);
+  return `<div class="muted">合計 ${fmtMin(total)}。登録名は「${esc(c.topic)}：作業名」になります。期限は${c.deadline ? dlabel(c.deadline) : 'なし'}。</div>
+    ${rows}
+    <div class="bar" style="margin-top:12px"><button class="primary" data-act="chatRegister">登録して今週に反映</button></div>`;
+}
+function registerChat(){
+  const c = UI.chat;
+  const plan = planSlots(c.items, c.deadline);
+  let n = 0;
+  c.items.forEach((it,i) => {
+    if (!it.on) return;
+    S.todos.push({ id:nid(), title:`${c.topic}：${it.t}`, role:it.role||'', milestoneId:c.ms||null,
+      estMin:it.m, due:c.deadline||null, done:false, doneAt:null, actualMin:null, slot:plan[i]||'', reason:'' });
+    n++;
+  });
+  save();
+  const first = plan.find(Boolean);
+  if (first) UI.week = monday(first.split('|')[0]);
+  UI.chat = newChat(); UI.log = []; UI.tab = 'week';
+  render();
+  alert(`${n}件のタスクを登録しました`);
 }
 
 /* ---------- Todo ---------- */
@@ -336,11 +518,121 @@ function renderReport(){
     </div>`;
 }
 
+/* ---------- 予定の読み込み（ICS：Google / Outlook） ---------- */
+function parseICSDate(val){
+  const m = String(val).match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/);
+  if (!m) return null;
+  const [, y, mo, d, h='0', mi='0', s='0', z] = m;
+  return z ? new Date(Date.UTC(+y,+mo-1,+d,+h,+mi,+s)) : new Date(+y,+mo-1,+d,+h,+mi,+s);
+}
+function parseICS(text){
+  const evs = []; let cur = null;
+  text.replace(/\r/g,'').replace(/\n[ \t]/g,'').split('\n').forEach(ln => {
+    if (ln === 'BEGIN:VEVENT'){ cur = {}; return; }
+    if (ln === 'END:VEVENT'){ if (cur) evs.push(cur); cur = null; return; }
+    if (!cur) return;
+    const i = ln.indexOf(':'); if (i < 0) return;
+    const name = ln.slice(0,i).split(';')[0], val = ln.slice(i+1);
+    if (name === 'DTSTART' || name === 'DTEND'){ cur[name] = parseICSDate(val); cur[name+'_allday'] = val.length === 8; }
+    else if (name === 'SUMMARY') cur.summary = val.replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\n/gi,' ');
+    else if (name === 'RRULE') cur.rrule = val;
+    else if (name === 'EXDATE') (cur.exdates ||= []).push(...val.split(',').map(v => parseICSDate(v)?.getTime()).filter(Boolean));
+    else if (name === 'TRANSP') cur.transp = val;
+    else if (name === 'STATUS') cur.status = val;
+  });
+  return evs;
+}
+/* 繰り返し予定を期間内に展開する（DAILY / WEEKLY・BYDAY・UNTIL・COUNT・EXDATE に対応） */
+function expandEvent(ev, from, to){
+  if (!ev.DTSTART || ev.DTSTART_allday || ev.transp === 'TRANSPARENT' || ev.status === 'CANCELLED') return [];
+  const dur = ev.DTEND ? ev.DTEND - ev.DTSTART : 3600000;
+  const base = ev.DTSTART.getTime(), out = [];
+  const push = s => { if (s + dur > from && s < to) out.push({ s, e:s+dur, t: ev.summary || '予定' }); };
+  if (!ev.rrule){ push(base); return out; }
+  const r = Object.fromEntries(ev.rrule.split(';').map(x => x.split('=')));
+  if (r.FREQ !== 'DAILY' && r.FREQ !== 'WEEKLY'){ push(base); return out; }
+  const until = r.UNTIL ? (parseICSDate(r.UNTIL)?.getTime() ?? Infinity) : Infinity;
+  const days = r.BYDAY ? r.BYDAY.split(',').map(x => DAY_IDX[x.slice(-2)]).filter(v => v !== undefined)
+                       : [new Date(base).getDay()];
+  const max = r.COUNT ? +r.COUNT : Infinity;
+  const ex = new Set(ev.exdates || []);
+  let n = 0;
+  for (let i = 0; i < 3650; i++){
+    const s = base + i * 86400000;
+    if (s > to || s > until) break;
+    const dow = new Date(s).getDay();
+    const hit = r.FREQ === 'DAILY' ? (!r.BYDAY || days.includes(dow)) : days.includes(dow);
+    if (!hit) continue;
+    if (++n > max) break;
+    if (ex.has(s)) continue;
+    push(s);
+  }
+  return out;
+}
+function importICS(label, text, url){
+  const from = parse(today()).getTime(), to = from + WINDOW_DAYS * 86400000;
+  const occ = parseICS(text).flatMap(e => expandEvent(e, from, to));
+  S.busy = S.busy.filter(b => b.src !== label && b.e > from).concat(occ.map(o => ({ ...o, src:label })));
+  S.calSources = S.calSources.filter(s => s.label !== label).concat({ label, url: url || '' });
+  S.syncAt[label] = new Date().toLocaleString('ja-JP');
+  save();
+  return occ.length;
+}
+async function fetchICS(url){
+  if (!/^https?:\/\//.test(url)) throw new Error('URLが不正です');
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.text();
+}
+async function loadFromURL(label, url){
+  if (!url){ UI.calMsg = 'URLを入力するか、ICSファイルを選んでください'; render(); return; }
+  try {
+    const n = importICS(label, await fetchICS(url), url);
+    UI.calMsg = `「${label}」から ${n} 件の予定を読み込みました`;
+  } catch(e){
+    UI.calMsg = 'URLから取得できませんでした（ブラウザの制限の可能性があります）。カレンダーからICSファイルを保存して選んでください。';
+  }
+  render();
+}
+function renderCal(){
+  const now = Date.now();
+  const upcoming = S.busy.filter(x => x.e > now).sort((a,b) => a.s - b.s).slice(0,40);
+  document.getElementById('v-cal').innerHTML = `
+    <div class="card"><h2>予定を読み込む（Google / Outlook）</h2>
+      <form data-form="cal" class="bar">
+        <input type="text" name="label" placeholder="名前（Google / Outlook）" style="width:12em" required>
+        <input type="url" name="url" class="grow" placeholder="ICSのURL（任意）">
+        <button class="primary">URLから取得</button>
+      </form>
+      <div class="bar" style="margin-top:10px">
+        <span class="muted">または ICSファイルを選ぶ（上の名前を使います）：</span>
+        <input type="file" id="icsfile" accept=".ics,text/calendar">
+      </div>
+      <p class="muted">ICSファイルがいちばん確実です。URLからの取得はブラウザの制限で失敗することがあります。
+        取り込むのは今日から${WINDOW_DAYS}日間です。終日の予定と「空いている」設定の予定は空き時間に影響させません。</p>
+      ${UI.calMsg ? `<p><strong>${esc(UI.calMsg)}</strong></p>` : ''}
+    </div>
+    <div class="card"><h2>予定元</h2>
+      ${S.calSources.length ? S.calSources.map(s => `<div class="item"><div class="bar">
+          <strong>${esc(s.label)}</strong>
+          <span class="muted">最終取得 ${esc(S.syncAt[s.label] || '-')}</span>
+          <span class="grow"></span>
+          ${s.url ? `<button data-act="calUpdate" data-label="${esc(s.label)}">再取得</button>` : ''}
+          <button class="ghost danger" data-act="calDel" data-label="${esc(s.label)}">削除</button>
+        </div></div>`).join('') : '<p class="muted">まだありません</p>'}
+    </div>
+    <div class="card"><h2>直近の予定（空き時間から差し引かれます）</h2>
+      ${upcoming.length ? upcoming.map(x => `<div class="item">${dlabel(ymd(new Date(x.s)))} ${hm(x.s)}–${hm(x.e)} ${esc(x.t)} <span class="muted">${esc(x.src)}</span></div>`).join('')
+        : '<p class="muted">予定はまだありません</p>'}
+    </div>`;
+}
+
 /* ---------- 描画 ---------- */
 function render(){
   document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === UI.tab));
   document.querySelectorAll('[data-view]').forEach(s => s.hidden = s.dataset.view !== UI.tab);
-  ({ week:renderWeek, todo:renderTodo, mbo:renderMbo, report:renderReport })[UI.tab]();
+  if (!UI.chat) UI.chat = newChat();
+  ({ week:renderWeek, chat:renderChat, todo:renderTodo, mbo:renderMbo, report:renderReport, cal:renderCal })[UI.tab]();
 }
 
 /* ---------- 書き出し・コピー ---------- */
@@ -364,7 +656,8 @@ function importFile(file){
       const j = JSON.parse(r.result);
       if (!Array.isArray(j.todos) || !Array.isArray(j.mbos) || !Array.isArray(j.milestones)) throw new Error('format');
       if (!confirm('現在のデータを読み込んだ内容で置き換えます。よろしいですか？')) return;
-      S = { mbos:j.mbos, milestones:j.milestones, todos:j.todos, reports:j.reports || {} };
+      S = { ...blank(), mbos:j.mbos, milestones:j.milestones, todos:j.todos, reports:j.reports || {},
+            busy:j.busy || [], calSources:j.calSources || [], syncAt:j.syncAt || {} };
       save(); render();
     } catch(e){ alert('読み込めませんでした。書き出したJSONファイルを選んでください。'); }
   };
@@ -407,6 +700,24 @@ document.addEventListener('click', e => {
         save(); render();
       }
       break;
+    case 'chatSet': setChat(b.dataset.k, b.dataset.v); render(); break;
+    case 'chatReset': UI.chat = newChat(); UI.log = []; render(); break;
+    case 'citem': UI.chat.items[+b.dataset.i].on = b.checked; render(); break;
+    case 'chatRegister': registerChat(); break;
+    case 'calUpdate': {
+      const s = S.calSources.find(x => x.label === b.dataset.label);
+      if (s) loadFromURL(s.label, s.url);
+      break;
+    }
+    case 'calDel':
+      if (confirm('この予定元と取り込んだ予定を削除しますか？')){
+        const l = b.dataset.label;
+        S.busy = S.busy.filter(x => x.src !== l);
+        S.calSources = S.calSources.filter(x => x.label !== l);
+        delete S.syncAt[l];
+        save(); UI.calMsg = ''; render();
+      }
+      break;
     case 'export':
       download(`task-backup-${today()}.json`, 'application/json', JSON.stringify(S, null, 2)); break;
     case 'import':
@@ -421,7 +732,25 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.id === 'imp'){ importFile(el.files[0]); el.value = ''; return; }
-
+  if (el.id === 'icsfile'){
+    const file = el.files[0]; el.value = '';
+    const label = (document.querySelector('[data-form="cal"] input[name="label"]').value || '').trim();
+    if (!file) return;
+    if (!label){ UI.calMsg = '先に名前（Google / Outlook）を入力してください'; render(); return; }
+    const r = new FileReader();
+    r.onload = () => {
+      try { const n = importICS(label, r.result, ''); UI.calMsg = `「${label}」から ${n} 件の予定を読み込みました`; }
+      catch(err){ UI.calMsg = 'ICSファイルを読み込めませんでした'; }
+      render();
+    };
+    r.readAsText(file);
+    return;
+  }
+  if (el.dataset.citemTitle !== undefined){
+    const it = UI.chat.items[+el.dataset.citemTitle];
+    if (it){ if (el.value.trim()) it.t = el.value.trim(); else el.value = it.t; }
+    return;
+  }
   if (el.dataset.save){
     const f = el.dataset.save, id = el.dataset.id, kind = el.dataset.kind || 'todo';
     const v = el.value;
@@ -446,6 +775,7 @@ document.addEventListener('change', e => {
   const c = el.dataset.chg;
   if (!c) return;
   if (c === 'filter'){ UI.filter = el.value; render(); return; }
+  if (c === 'citem-est'){ UI.chat.items[+el.dataset.i].m = +el.value; render(); return; }
   const id = el.dataset.id;
   const t = S.todos.find(x => x.id === id);
   const m = S.milestones.find(x => x.id === id);
@@ -461,21 +791,24 @@ document.addEventListener('change', e => {
   save(); render();
 });
 
-document.addEventListener('submit', e => {
+document.addEventListener('submit', async e => {
   const f = e.target, kind = f.dataset.form;
   if (!kind) return;
   e.preventDefault();
   const fd = new FormData(f);
+  if (kind.startsWith('chat')){ handleChat(kind, fd); render(); return; }
+  if (kind === 'cal'){
+    await loadFromURL((fd.get('label')||'').trim(), (fd.get('url')||'').trim());
+    return;
+  }
   const title = (fd.get('title') || fd.get('objective') || '').trim();
+  if (!title) return;
   if (kind === 'todo'){
-    if (!title) return;
     S.todos.push({ id:nid(), title, role:(fd.get('role')||'').trim(), milestoneId:fd.get('ms')||null,
       estMin:+fd.get('est'), due:fd.get('due')||null, done:false, doneAt:null, actualMin:null, slot:'', reason:'' });
   } else if (kind === 'mbo'){
-    if (!title) return;
     S.mbos.push({ id:nid(), half:(fd.get('half')||curHalf()).trim(), objective:title, krs:[], progress:0, review:'' });
   } else if (kind === 'ms'){
-    if (!title) return;
     S.milestones.push({ id:nid(), mboId:f.dataset.id, title, due:fd.get('due')||null, status:'未着手' });
   }
   save(); render();
