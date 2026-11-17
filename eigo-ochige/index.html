@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>英語落ちゲー</title>
+<style>
+:root{--bg:#0a0c1c;--panel:#1b1f3b;--ink:#eef0ff;--sub:#9aa0c8;--accent:#ffb347;--btn:#6ea8ff;--ok:#7cfc9a;--ng:#ff6b6b}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+  font-family:system-ui,-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.6}
+main{max-width:460px;margin:0 auto;padding:16px}
+h1{text-align:center;font-size:1.7rem;margin:12px 0 4px;
+  background:linear-gradient(90deg,#ff6b8b,#ffb347,#5bd4a0,#6ea8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{text-align:center;color:var(--sub);font-size:.9rem;margin:0 0 8px}
+.panel{background:var(--panel);border-radius:16px;padding:18px;margin-top:12px}
+h2{font-size:1.1rem;margin:0 0 10px;color:var(--accent)}
+button{font:inherit;font-weight:700;border:0;border-radius:12px;padding:12px 16px;min-height:44px;
+  background:var(--btn);color:#0a0c1c;cursor:pointer}
+button:active{transform:translateY(1px)}
+.lvl{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.lvl button{background:#2a3060;color:var(--ink)}
+.lvl button.on{background:var(--accent);color:#0a0c1c}
+.lvl small{display:block;font-weight:400;font-size:.75rem;opacity:.8}
+.big{width:100%;font-size:1.15rem;margin-top:6px;background:var(--accent)}
+.row{display:flex;align-items:center;gap:8px;margin:10px 0;color:var(--sub);font-size:.92rem}
+.best{color:var(--sub);font-size:.9rem;margin:6px 0 0}
+details{margin-top:12px;color:var(--sub);font-size:.9rem}
+details li{margin:4px 0}
+.hud{display:flex;justify-content:space-between;align-items:center;font-variant-numeric:tabular-nums;
+  margin:4px 2px 10px;font-size:.95rem;color:var(--sub)}
+.hud b{color:var(--ink);font-size:1.25rem}
+#lives{color:var(--ng);font-size:1.15rem;letter-spacing:2px}
+canvas{display:block;margin:0 auto;border-radius:16px;touch-action:none;cursor:pointer;
+  box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.hint{font-size:.8rem;color:var(--sub);text-align:center;margin:10px 0 0}
+.quit{margin-top:10px;background:#2a3060;color:var(--ink);width:100%}
+.over-score{font-size:2.4rem;font-weight:800;text-align:center;margin:4px 0;color:var(--accent)}
+.over-info,.over-best{text-align:center;color:var(--sub);margin:2px 0}
+.over-best b{color:var(--ok)}
+#missed{list-style:none;padding:0;margin:8px 0 0;max-height:240px;overflow:auto}
+#missed li{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:8px 10px;border-radius:10px;background:#12152b;margin-bottom:6px}
+#missed li button{padding:6px 10px;min-height:0;font-size:.85rem;background:#2a3060;color:var(--ink)}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.actions button.alt{background:#2a3060;color:var(--ink)}
+</style>
+</head>
+<body>
+<main>
+  <h1>英語落ちゲー</h1>
+  <p class="sub">落ちてくる英単語を、正しい日本語の箱に落とせ！</p>
+
+  <!-- メニュー -->
+  <section id="menu" class="panel">
+    <h2>むずかしさをえらぶ</h2>
+    <div class="lvl" id="lvl">
+      <button data-level="1" class="on">Lv1<small>基礎</small></button>
+      <button data-level="2">Lv2<small>中級</small></button>
+      <button data-level="3">Lv3<small>上級</small></button>
+    </div>
+    <label class="row"><input type="checkbox" id="voice" checked> 英単語を読み上げる</label>
+    <p class="best">ベストスコア：<b id="best">0</b></p>
+    <button id="startBtn" class="big">スタート</button>
+    <details>
+      <summary>あそびかた</summary>
+      <ul>
+        <li>上から英単語が落ちてくる</li>
+        <li>下の4つの箱は日本語の意味。正しい箱に落とせば消えて得点</li>
+        <li>←→：箱の位置をずらす　↓ / Space：その場で落とす</li>
+        <li>1〜4キー：その箱に直接落とす（スマホは箱をタップ）</li>
+        <li>上の方をタップ：落下ブロックを左右に移動（スマホ）</li>
+        <li>答えが遅れる・間違えるとハートが減る（ハート0でゲームオーバー）</li>
+        <li>連続で正解すると「コンボ」でボーナス得点</li>
+      </ul>
+    </details>
+  </section>
+
+  <!-- ゲーム -->
+  <section id="game" hidden>
+    <div class="hud">
+      <span>SCORE <b id="score">0</b></span>
+      <span>COMBO <b id="combo">0</b></span>
+      <span id="lives">♥♥♥</span>
+    </div>
+    <canvas id="cv"></canvas>
+    <p class="hint">←→ 移動 ／ ↓・Space 落とす ／ 1〜4 で直接答える</p>
+    <button class="quit" id="quitBtn">メニューにもどる</button>
+  </section>
+
+  <!-- 結果 -->
+  <section id="over" class="panel" hidden>
+    <h2>ゲームオーバー</h2>
+    <div class="over-score" id="ovScore">0</div>
+    <p class="over-info" id="ovInfo"></p>
+    <p class="over-best" id="ovBest"></p>
+    <div id="missTitle"><h2 style="margin-top:16px">まちがえた単語（タップで読み上げ）</h2></div>
+    <ul id="missed"></ul>
+    <div class="actions">
+      <button id="retryBtn">もう一回</button>
+      <button id="menuBtn" class="alt">メニュー</button>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  // ===== 単語データ [英単語, 日本語] =====
+  const POOL = {
+    1: [["apple","りんご"],["dog","犬"],["cat","猫"],["book","本"],["water","水"],
+        ["sun","太陽"],["moon","月"],["happy","うれしい"],["big","大きい"],["small","小さい"],
+        ["run","走る"],["eat","食べる"],["drink","飲む"],["sleep","眠る"],["school","学校"],
+        ["friend","友だち"],["family","家族"],["red","赤い"],["blue","青い"],["door","ドア"],
+        ["window","窓"],["car","車"],["train","電車"],["house","家"],["night","夜"]],
+    2: [["beautiful","美しい"],["difficult","難しい"],["interesting","面白い"],["expensive","高価な"],
+        ["dangerous","危険な"],["important","重要な"],["decide","決める"],["remember","覚えている"],
+        ["forget","忘れる"],["borrow","借りる"],["explain","説明する"],["travel","旅行する"],
+        ["believe","信じる"],["improve","改善する"],["neighbor","隣人"],["hospital","病院"],
+        ["weather","天気"],["opinion","意見"],["language","言語"],["culture","文化"]],
+    3: [["achieve","達成する"],["avoid","避ける"],["consider","考慮する"],["establish","設立する"],
+        ["grateful","感謝している"],["reluctant","気が進まない"],["ambiguous","曖昧な"],["essential","不可欠な"],
+        ["deteriorate","悪化する"],["fluctuate","変動する"],["inevitable","避けられない"],["meticulous","几帳面な"],
+        ["procrastinate","先延ばしにする"],["resilient","回復力のある"],["vivid","鮮やかな"],["hesitate","ためらう"],
+        ["abundant","豊富な"],["contradict","矛盾する"],["sincere","誠実な"],["urge","強く促す"]]
+  };
+  const FALL = {1: 42, 2: 56, 3: 72};            // 落下速度(px/秒) の基準
+  const COLORS = ["#ff6b8b", "#ffb347", "#5bd4a0", "#6ea8ff"];
+  const W = 360, H = 560, BH = 96, COLW = W / 4, LANDY = H - BH - 8;
+
+  const $ = id => document.getElementById(id);
+  const cv = $("cv"), ctx = cv.getContext("2d");
+  let level = 1, G = null, running = false, lastT = 0, shake = 0, audio = null;
+
+  // ===== 保存（失敗しても動くように try/catch）=====
+  const store = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+  const load = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const bestKey = () => "eigoOchige_best_" + level;
+
+  // ===== 音 =====
+  function beep(f, d, type = "square") {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = type; o.frequency.value = f; g.gain.value = 0.05;
+      o.connect(g); g.connect(audio.destination);
+      o.start(); o.stop(audio.currentTime + d);
+    } catch (e) {}
+  }
+  function speak(t) {
+    if (!$("voice").checked || !("speechSynthesis" in window)) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = "en-US"; u.rate = 0.9;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  // ===== キャンバス =====
+  function fit() {
+    const w = Math.min(cv.parentElement.clientWidth, 420);
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    cv.style.width = w + "px";
+    cv.style.height = (w * H / W) + "px";
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+  }
+  window.addEventListener("resize", () => { if (!$("game").hidden) fit(); });
+
+  const colX = i => i * COLW + COLW / 2;
+  const pick = (arr, n) => {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; }
+    return a.slice(0, n);
+  };
+
+  // ===== ゲームロジック =====
+  function newBuckets() {
+    const recent = G.recent;
+    let cand = POOL[level].filter(w => !recent.includes(w[0]));
+    if (cand.length < 4) cand = POOL[level];
+    G.buckets = pick(cand, 4);
+    G.queue = pick(G.buckets, 4);                 // 4箱それぞれ1回ずつ出す
+    G.recent = recent.concat(G.buckets.map(w => w[0])).slice(-12);
+  }
+
+  function spawn() {
+    if (G.queue.length === 0) newBuckets();
+    const e = G.queue.shift();
+    G.block = { en: e[0], ja: e[1], target: G.buckets.indexOf(e), col: 1, x: colX(1), y: 30 };
+    speak(e[0]);
+  }
+
+  function fallSpeed() {
+    const base = FALL[level];
+    return Math.min(base + G.correct * 1.2, base * 2.2);
+  }
+
+  function burst(x, y, color) {
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 160;
+      G.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 80, g: 300, t: 0, life: 0.6, color });
+    }
+  }
+  function popText(text, x, y, color) {
+    G.fx.push({ text, x, y, vx: 0, vy: -60, g: 0, t: 0, life: 0.9, color });
+  }
+  function flash(text, color) { G.flashText = text; G.flashColor = color; G.flashT = 0.9; }
+
+  // col: 落とした箱の番号（0〜3）／timeout: 時間切れ
+  function resolve(col, timeout) {
+    const b = G.block;
+    if (!b) return;
+    G.block = null;
+    G.total++;
+    const cx = colX(col < 0 ? b.col : col);
+    if (!timeout && col === b.target) {
+      G.correct++; G.combo++; G.maxCombo = Math.max(G.maxCombo, G.combo);
+      const pts = 100 + (G.combo - 1) * 20;
+      G.score += pts;
+      burst(cx, LANDY, COLORS[b.target]);
+      popText("+" + pts, cx - 20, LANDY - 20, "#7cfc9a");
+      flash("GOOD!  " + b.ja, "#7cfc9a");
+      beep(880, 0.08);
+    } else {
+      G.lives--; G.combo = 0;
+      G.missed.push([b.en, b.ja]);
+      shake = 12;
+      flash((timeout ? "TIME UP" : "MISS") + "  正解：" + b.ja, "#ff6b6b");
+      beep(180, 0.25, "sawtooth");
+    }
+    updateHud();
+    if (G.lives <= 0) { endGame(); return; }
+    G.nextIn = 0.7;
+  }
+
+  function update(dt) {
+    G.fx.forEach(p => { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += p.g * dt; });
+    G.fx = G.fx.filter(p => p.t < p.life);
+    if (G.flashT > 0) G.flashT -= dt;
+    shake = Math.max(0, shake - dt * 40);
+    if (!G.block) {
+      G.nextIn -= dt;
+      if (G.nextIn <= 0) spawn();
+      return;
+    }
+    const b = G.block;
+    b.x += (colX(b.col) - b.x) * Math.min(1, dt * 14);
+    b.y += fallSpeed() * dt;
+    if (b.y >= LANDY) resolve(-1, true);
+  }
+
+  // ===== 描画 =====
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  const chunk = (s, n) => { const out = []; for (let i = 0; i < s.length; i += n) out.push(s.slice(i, i + n)); return out; };
+
+  function draw() {
+    ctx.save();
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#1b1f3b"); g.addColorStop(1, "#0a0c1c");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+
+    ctx.strokeStyle = "rgba(255,255,255,.05)"; ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(i * COLW, 0); ctx.lineTo(i * COLW, H); ctx.stroke(); }
+
+    // 箱（日本語の意味）
+    const b = G.block;
+    G.buckets.forEach((w, i) => {
+      const x = i * COLW + 4, y = H - BH + 4, bw = COLW - 8, bh = BH - 8;
+      ctx.fillStyle = COLORS[i]; rr(x, y, bw, bh, 12); ctx.fill();
+      if (b && b.col === i) { ctx.lineWidth = 3; ctx.strokeStyle = "#ffffff"; rr(x, y, bw, bh, 12); ctx.stroke(); }
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.font = "bold 13px sans-serif"; ctx.textBaseline = "top";
+      ctx.fillText(String(i + 1), i * COLW + COLW / 2, y + 6);
+      ctx.fillStyle = "#0a0c1c";
+      ctx.font = 'bold 15px system-ui,"Hiragino Sans","Yu Gothic",sans-serif';
+      ctx.textBaseline = "middle";
+      const ls = chunk(w[1], 5);
+      ls.forEach((t, k) => ctx.fillText(t, i * COLW + COLW / 2, y + bh / 2 + 8 + (k - (ls.length - 1) / 2) * 18));
+    });
+
+    // 落ちてくる単語
+    if (b) {
+      ctx.setLineDash([4, 6]); ctx.strokeStyle = "rgba(255,255,255,.3)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(b.x, b.y + 40); ctx.lineTo(b.x, H - BH); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = "bold 18px system-ui,sans-serif";
+      const tw = Math.max(COLW - 10, ctx.measureText(b.en).width + 24);
+      ctx.fillStyle = "#f4f1ff"; rr(b.x - tw / 2, b.y, tw, 40, 12); ctx.fill();
+      ctx.fillStyle = "#1b1f3b"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(b.en, b.x, b.y + 20);
+    }
+
+    // エフェクト
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    G.fx.forEach(p => {
+      ctx.globalAlpha = Math.max(0, 1 - p.t / p.life);
+      ctx.fillStyle = p.color;
+      if (p.text) { ctx.font = "bold 20px sans-serif"; ctx.fillText(p.text, p.x, p.y); }
+      else { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); }
+    });
+    ctx.globalAlpha = 1;
+    if (G.flashT > 0) {
+      ctx.globalAlpha = Math.min(1, G.flashT * 2);
+      ctx.fillStyle = G.flashColor;
+      ctx.font = 'bold 20px system-ui,"Hiragino Sans",sans-serif';
+      ctx.fillText(G.flashText, W / 2, H * 0.42);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  function updateHud() {
+    $("score").textContent = G.score;
+    $("combo").textContent = G.combo;
+    $("lives").textContent = "♥".repeat(G.lives) + "♡".repeat(Math.max(0, 3 - G.lives));
+  }
+
+  // ===== ループ =====
+  function loop(t) {
+    const dt = Math.min(0.05, (t - lastT) / 1000);
+    lastT = t;
+    if (!running) return;
+    update(dt);
+    draw();
+    if (running) requestAnimationFrame(loop);
+  }
+
+  // ===== 入力 =====
+  function drop(col) { resolve(col, false); }
+
+  window.addEventListener("keydown", e => {
+    if (!running || !G || !G.block) return;
+    const b = G.block;
+    if (e.key === "ArrowLeft") { b.col = Math.max(0, b.col - 1); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { b.col = Math.min(3, b.col + 1); e.preventDefault(); }
+    else if (e.key === "ArrowDown" || e.key === " ") { e.preventDefault(); drop(b.col); }
+    else if (/^[1-4]$/.test(e.key)) { drop(+e.key - 1); }
+  });
+
+  cv.addEventListener("pointerdown", e => {
+    if (!running || !G || !G.block) return;
+    const r = cv.getBoundingClientRect();
+    const lx = (e.clientX - r.left) / r.width * W;
+    const ly = (e.clientY - r.top) / r.height * H;
+    const col = Math.min(3, Math.max(0, Math.floor(lx / COLW)));
+    if (ly >= H - BH) drop(col);          // 箱をタップ＝答え
+    else G.block.col = col;               // 上をタップ＝移動
+  });
+
+  // ===== 画面切り替え =====
+  function showMenu() {
+    running = false;
+    $("game").hidden = true; $("over").hidden = true; $("menu").hidden = false;
+    $("best").textContent = load(bestKey()) || 0;
+  }
+
+  function startGame() {
+    document.activeElement && document.activeElement.blur();
+    beep(660, 0.06);
+    G = { score: 0, combo: 0, maxCombo: 0, lives: 3, correct: 0, total: 0,
+          buckets: [], queue: [], recent: [], block: null, nextIn: 0.5,
+          fx: [], flashT: 0, flashText: "", flashColor: "#fff", missed: [] };
+    newBuckets();
+    $("menu").hidden = true; $("over").hidden = true; $("game").hidden = false;
+    fit(); updateHud();
+    running = true;
+    lastT = performance.now();
+    requestAnimationFrame(loop);
+  }
+
+  function endGame() {
+    running = false;
+    const prev = +(load(bestKey()) || 0);
+    const isBest = G.score > prev;
+    if (isBest) store(bestKey(), G.score);
+    $("game").hidden = true; $("over").hidden = false;
+    $("ovScore").textContent = G.score;
+    const acc = G.total ? Math.round(G.correct / G.total * 100) : 0;
+    $("ovInfo").textContent = `正解 ${G.correct}/${G.total}（${acc}%）　最大コンボ ${G.maxCombo}`;
+    $("ovBest").innerHTML = isBest ? "<b>NEW BEST!</b>" : "ベスト " + Math.max(prev, G.score);
+    const ul = $("missed"); ul.innerHTML = "";
+    $("missTitle").hidden = G.missed.length === 0;
+    G.missed.forEach(([en, ja]) => {
+      const li = document.createElement("li");
+      const span = document.createElement("span");
+      span.textContent = en + "  " + ja;
+      const btn = document.createElement("button");
+      btn.textContent = "🔊";
+      btn.addEventListener("click", () => speak(en));
+      li.append(span, btn);
+      ul.appendChild(li);
+    });
+  }
+
+  // ===== ボタン =====
+  document.querySelectorAll("#lvl button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      level = +btn.dataset.level;
+      document.querySelectorAll("#lvl button").forEach(b => b.classList.toggle("on", b === btn));
+      $("best").textContent = load(bestKey()) || 0;
+    });
+  });
+  $("startBtn").addEventListener("click", startGame);
+  $("retryBtn").addEventListener("click", startGame);
+  $("menuBtn").addEventListener("click", showMenu);
+  $("quitBtn").addEventListener("click", showMenu);
+
+  showMenu();
+})();
+</script>
+</body>
+</html>
